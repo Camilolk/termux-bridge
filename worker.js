@@ -75,11 +75,14 @@ export default {
       return stub.fetch("https://queue/next", { method: "GET" });
     }
 
-    const taskMatch = url.pathname.match(/^\/v1\/tasks\/([a-f0-9-]+)$/i);
-    if (request.method === "GET" && taskMatch) {
-      return stub.fetch("https://queue/tasks/" + taskMatch[1], {
-        method: "GET"
-      });
+    const taskPrefix = "/v1/tasks/";
+    if (request.method === "GET" && url.pathname.startsWith(taskPrefix)) {
+      const taskId = url.pathname.slice(taskPrefix.length).replace(/\/$/, "");
+      if (taskId && !taskId.includes("/")) {
+        return stub.fetch("https://queue/tasks/" + taskId, {
+          method: "GET"
+        });
+      }
     }
 
     const resultMatch = url.pathname.match(/^\/v1\/tasks\/([a-f0-9-]+)\/result$/i);
