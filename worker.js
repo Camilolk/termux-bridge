@@ -1,4 +1,9 @@
-const ALLOWED_OPERATIONS = new Set(["pwd", "python-version", "list-workspace"]);
+const ALLOWED_OPERATIONS = new Set([
+  "pwd",
+  "python-version",
+  "list-workspace",
+  "read-file"
+]);
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -29,6 +34,25 @@ function timingSafeEqual(a, b) {
   return diff === 0;
 }
 
+function validWorkspacePath(value) {
+  if (
+    typeof value !== "string" ||
+    !value.trim() ||
+    value.length > 1024 ||
+    value.includes("\0") ||
+    value.includes("\\")
+  ) {
+    return false;
+  }
+
+  const path = value.trim();
+  if (path.startsWith("/") || path.split("/").includes("..")) {
+    return false;
+  }
+
+  return true;
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -37,7 +61,7 @@ export default {
       return json({
         status: "online",
         service: "Termux Bridge",
-        version: "0.3.0"
+        version: "0.4.0"
       });
     }
 
@@ -64,10 +88,21 @@ export default {
         return json({ error: "operation_not_allowed" }, 400);
       }
 
+      const payload = { operation: body.operation };
+
+      if (body.operation === "read-file") {
+        if (!validWorkspacePath(body.path)) {
+          return json({ error: "invalid_path" }, 400);
+        }
+        payload.path = body.path.trim();
+      } else if (Object.hasOwn(body, "path")) {
+        return json({ error: "unexpected_parameter" }, 400);
+      }
+
       return stub.fetch("https://queue/tasks", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ operation: body.operation })
+        body: JSON.stringify(payload)
       });
     }
 
@@ -130,6 +165,7 @@ export class TaskQueue {
       const task = {
         id: crypto.randomUUID(),
         operation: body.operation,
+        ...(body.operation === "read-file" ? { path: body.path } : {}),
         status: "pending",
         created_at: new Date().toISOString()
       };
